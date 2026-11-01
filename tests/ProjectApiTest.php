@@ -3,6 +3,7 @@
 namespace App\Tests;
 
 use ApiPlatform\Test\ApiTestCase;
+use App\Entity\Account;
 use App\Entity\User;
 use App\Factory\AccountFactory;
 use App\Factory\ProjectFactory;
@@ -19,7 +20,11 @@ class ProjectApiTest extends ApiTestCase
 
     public function testGetProjectsList(): void
     {
-        [$account, $user] = $this->createAccountWithProjects();
+        $account = $this->createAccountWithProjects(3);
+
+        $user = UserFactory::createOne([
+            'accounts' => [$account]
+        ]);
 
         $this->sendGetProjectsRequest($user, $account->getId());
 
@@ -31,12 +36,64 @@ class ProjectApiTest extends ApiTestCase
         ]);
     }
 
+    public function testSwitchAccounts(): void
+    {
+        $emptyAccount = $this->createAccountWithProjects(0);
+        $accountWithProjects = $this->createAccountWithProjects(3);
+
+        $user = UserFactory::createOne([
+            'accounts' => [$emptyAccount, $accountWithProjects]
+        ]);
+
+        $this->sendGetProjectsRequest($user, $emptyAccount->getId());
+
+        $this->assertResponseIsSuccessful();
+        $this->assertJsonContains([
+            '@context' => '/api/v1/contexts/Project',
+            '@type' => 'Collection',
+            'totalItems' => 0,
+        ]);
+
+        $this->sendGetProjectsRequest($user, $accountWithProjects->getId());
+
+        $this->assertResponseIsSuccessful();
+        $this->assertJsonContains([
+            '@context' => '/api/v1/contexts/Project',
+            '@type' => 'Collection',
+            'totalItems' => 3,
+        ]);
+    }
+
+    public function testGetSharedAccountProjectList(): void
+    {
+        $account = $this->createAccountWithProjects(3);
+        UserFactory::createOne([
+            'accounts' => [$account]
+        ]);
+
+        $otherUser = UserFactory::createOne([
+            'accounts' => [$account]
+        ]);
+
+        $this->sendGetProjectsRequest($otherUser, $account->getId());
+
+        $this->assertResponseIsSuccessful();
+        $this->assertJsonContains([
+            '@context' => '/api/v1/contexts/Project',
+            '@type' => 'Collection',
+            'totalItems' => 3,
+        ]);
+    }
+
     public function testGetOtherUserProjectsList(): void
     {
-        $this->createAccountWithProjects();
+        $account = $this->createAccountWithProjects(3);
+
+        UserFactory::createOne([
+            'accounts' => [$account]
+        ]);
 
         $otherUser = UserFactory::createOne();
-
         $this->sendGetProjectsRequest($otherUser);
 
         $this->assertResponseIsSuccessful();
@@ -49,7 +106,11 @@ class ProjectApiTest extends ApiTestCase
 
     public function testGetOtherUserProjectsListById(): void
     {
-        [$account] = $this->createAccountWithProjects();
+        $account = $this->createAccountWithProjects(3);
+        UserFactory::createOne([
+            'accounts' => [$account]
+        ]);
+
         $otherUser = UserFactory::createOne();
 
         $this->sendGetProjectsRequest($otherUser, $account->getId());
@@ -62,19 +123,17 @@ class ProjectApiTest extends ApiTestCase
         ]);
     }
 
-    private function createAccountWithProjects(): array
+    private function createAccountWithProjects(int $amount, string $name = 'Test Account'): Account
     {
-        $account = AccountFactory::createOne(['name' => 'Test Account']);
+        $account = AccountFactory::createOne(['name' => $name]);
 
-        ProjectFactory::createMany(3, [
-            'account' => $account,
-        ]);
+        if ($amount > 0) {
+            ProjectFactory::createMany($amount, [
+                'account' => $account,
+            ]);
+        }
 
-        $user = UserFactory::createOne([
-            'accounts' => [$account],
-        ]);
-
-        return [$account, $user];
+        return $account;
     }
 
     private function sendGetProjectsRequest(User $user, ?int $accountId = null): ResponseInterface
