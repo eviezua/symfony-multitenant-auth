@@ -17,9 +17,9 @@ use App\Entity\Project;
 )]
 class ProjectApi
 {
-    private ?int $id = null;
+    public ?int $id = null;
 
-    private ?string $title = null;
+    public ?string $title = null;
 
-    private ?string $description = null;
+    public ?string $description = null;
 }
