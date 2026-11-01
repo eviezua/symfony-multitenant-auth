@@ -13,30 +13,30 @@ final class UserFactory extends PersistentObjectFactory
 {
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher,
-    )
-    {
+    ) {
         parent::__construct();
     }
 
-    #[\Override]
+    #[Override]
     public static function class(): string
     {
         return User::class;
     }
 
-    #[\Override]
+    #[Override]
     protected function defaults(): array|callable
     {
         return [
-            'email' => self::faker()->text(180),
-            'password' => self::faker()->text(255),
+            'email' => self::faker()->unique()->safeEmail(),
+            'password' => self::faker()->text(20),
+            'accounts' => AccountFactory::new()->many(rand(1, 3)),
         ];
     }
 
-    #[\Override]
+    #[Override]
     protected function initialize(): static
     {
-        return $this->afterInstantiate(function(User $user) {
+        return $this->afterInstantiate(function (User $user) {
             if ($user->getPassword()) {
                 $user->setPassword(
                     $this->passwordHasher->hashPassword($user, $user->getPassword())
