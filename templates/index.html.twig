@@ -45,7 +45,8 @@
     </div>
     <script>
         (function() {
-            let authToken = null;
+        let authToken = null;
+        let currentRefreshToken = null;
         let currentAccountId = null;
 
         const loginForm = document.getElementById('loginForm');
@@ -90,6 +91,7 @@
                 }
 
                 authToken = data.token;
+                currentRefreshToken = data.refresh_token;
                 currentAccountId = data.default_account_id || null;
 
                 await loadAccounts();
@@ -106,11 +108,8 @@
 
         async function loadAccounts() {
             try {
-                const response = await fetch('/api/v1/accounts', {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Accept': 'application/ld+json'
-                    }
+                const response = await apiFetch('/api/v1/accounts', {
+                    headers: { 'Accept': 'application/ld+json' }
                 });
 
                 if (!response.ok) throw new Error('Cannot load accounts');
@@ -158,12 +157,8 @@
             projectsList.appendChild(loadingSpan);
 
             try {
-                const response = await fetch('/api/v1/projects', {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Account-ID': currentAccountId,
-                        'Accept': 'application/ld+json'
-                    }
+                const response = await apiFetch('/api/v1/projects', {
+                    headers: { 'Accept': 'application/ld+json' }
                 });
 
                 if (!response.ok) throw new Error('Error project loading.');
@@ -216,8 +211,51 @@
             }
         }
 
-        logoutBtn.addEventListener('click', () => {
+        async function apiFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = `Bearer ${authToken}`;
+            if (currentAccountId) {
+                options.headers['Account-ID'] = currentAccountId;
+            }
+
+            let response = await fetch(url, options);
+
+            if (response.status === 401 && currentRefreshToken) {
+                try {
+                    const refreshResponse = await fetch('/api/v1/token/refresh', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ refresh_token: currentRefreshToken })
+                    });
+
+                    if (!refreshResponse.ok) {
+                        throw new Error('Refresh failed');
+                    }
+
+                    const refreshData = await refreshResponse.json();
+
+                    authToken = refreshData.token;
+                    if (refreshData.refresh_token) {
+                        currentRefreshToken = refreshData.refresh_token;
+                    }
+
+                    options.headers['Authorization'] = `Bearer ${authToken}`;
+                    response = await fetch(url, options);
+
+                } catch (err) {
+                    logoutUser();
+                    throw err;
+                }
+            }
+            return response;
+        }
+
+        function logoutUser() {
             authToken = null;
+            currentRefreshToken = null;
             currentAccountId = null;
             dashboardCard.classList.add('d-none');
             loginCard.classList.remove('d-none');
@@ -225,7 +263,9 @@
             submitBtn.removeAttribute('disabled');
             accountSelect.replaceChildren();
             projectsList.textContent = 'Select account to see projects.';
-        });
+        }
+
+        logoutBtn.addEventListener('click', logoutUser);
         })();
     </script>
 {% endblock %}
