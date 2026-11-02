@@ -1,0 +1,6 @@
+gesdinet_jwt_refresh_token:
+    ttl: 86400
+    refresh_token_class: App\Entity\RefreshToken
+    api_platform:
+        enabled: true
+    single_use: true

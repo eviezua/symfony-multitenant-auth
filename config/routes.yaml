@@ -4,3 +4,7 @@ controllers:
 api_v1_login:
     path: /api/v1/login
     methods: ['POST']
+
+api_token_refresh:
+    path: /api/v1/token/refresh
+    methods: ['POST']
