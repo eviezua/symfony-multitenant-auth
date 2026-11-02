@@ -15,3 +15,10 @@
 3. Access the application locally via
     ```bash
     https://localhost
+4. For loading fixtures use:
+    ```bash
+    docker exec -it symfony-multitenant-auth-php-fpm-1 php bin/console foundry:load-fixtures main
+5. To log in as users use ```password```
+6. Generate the JWT cryptographic keys:
+    ```bash
+    docker exec -it symfony-multitenant-auth-php-fpm-1 php bin/console lexik:jwt:generate-keypair
