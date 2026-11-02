@@ -20,27 +20,45 @@ class AuthTest extends ApiTestCase
         $client = static::createClient();
 
         $account = AccountFactory::createOne(['name' => 'Company Account']);
-
         $this->createUser([$account]);
 
         $this->requestLogin($client, 'user@example.com', 'password');
-
         $this->assertResponseIsSuccessful();
 
         $data = $client->getResponse()->toArray();
-
-        $this->assertArrayHasKey('token', $data);
-        $this->assertIsString($data['token']);
-
-        $this->assertArrayHasKey('default_account_id', $data);
+        $this->assertIsAuthPayload($data);
         $this->assertSame($account->getId(), $data['default_account_id']);
+    }
+
+    public function testSuccessRefreshToken(): void
+    {
+        $client = static::createClient();
+        $refreshToken = $this->obtainRefreshToken($client);
+
+        $refreshResponse = $this->requestRefreshToken($client, $refreshToken);
+        $this->assertResponseIsSuccessful();
+
+        $this->assertIsAuthPayload($refreshResponse->toArray());
+    }
+
+    public function testFailedRefreshToken(): void
+    {
+        $client = static::createClient();
+        $refreshToken = $this->obtainRefreshToken($client);
+
+        $this->requestRefreshToken($client, $refreshToken);
+        $this->assertResponseIsSuccessful();
+
+        $this->requestRefreshToken($client, $refreshToken);
+        $this->assertResponseStatusCodeSame(401);
+        $this->assertJsonContains(['message' => 'JWT Refresh Token Not Found']);
     }
 
     public function testFailedLogin(): void
     {
         $client = static::createClient();
 
-        $this->createUser([]);
+        $this->createUser();
 
         $this->requestLogin($client, 'user@example.com', 'drowssap');
 
@@ -48,8 +66,20 @@ class AuthTest extends ApiTestCase
         $this->assertJsonContains(['message' => 'Invalid credentials.']);
     }
 
+    private function obtainRefreshToken(
+        Client $client,
+        string $email = 'user@example.com',
+        string $password = 'password'
+    ): string {
+        $this->createUser([], $email, $password);
+        $response = $this->requestLogin($client, $email, $password);
+
+        $this->assertResponseIsSuccessful();
+        return $response->toArray()['refresh_token'];
+    }
+
     private function createUser(
-        array $accounts,
+        array $accounts = [],
         string $email = 'user@example.com',
         string $password = 'password'
     ): void {
@@ -68,5 +98,21 @@ class AuthTest extends ApiTestCase
                 'password' => $password,
             ],
         ]);
+    }
+
+    private function requestRefreshToken(Client $client, string $refreshToken): ResponseInterface
+    {
+        return $client->request('POST', '/api/v1/token/refresh', [
+            'json' => ['refresh_token' => $refreshToken],
+        ]);
+    }
+
+    private function assertIsAuthPayload(array $data): void
+    {
+        $this->assertArrayHasKey('token', $data);
+        $this->assertIsString($data['token']);
+
+        $this->assertArrayHasKey('refresh_token', $data);
+        $this->assertIsString($data['refresh_token']);
     }
 }
