@@ -1,0 +1,231 @@
+{% extends 'base.html.twig' %}
+{% block title %}Multitenant App{% endblock %}
+{% block body %}
+<div id="loginCard">
+    <h2 class="text-center mb-4">Log in</h2>
+
+    <div id="errorAlert" class="alert alert-danger d-none" role="alert"></div>
+
+    <div id="successAlert" class="alert alert-success d-none" role="alert">
+        <strong>Success!</strong>
+    </div>
+
+    <form id="loginForm">
+        <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" value="" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" value="" required>
+        </div>
+
+        <button type="submit" class="p-2 btn btn-primary w-100" id="submitBtn">Log in</button>
+    </form>
+</div>
+
+    <div id="dashboardCard" class="card shadow-sm p-4 border-0 d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Your projects</h2>
+            <button id="logoutBtn" class="btn btn-outline-danger btn-sm">Log out</button>
+        </div>
+
+        <div class="mb-3">
+            <label for="accountSelect" class="form-label fw-bold">Current account:</label>
+            <select class="form-select" id="accountSelect">
+                <option value="" disabled selected>-- Select account --</option>
+            </select>
+        </div>
+
+        <div class="mt-4">
+            <h4>Projects</h4>
+            <div id="projectsList" class="text-muted">Select account to see projects.</div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            let authToken = null;
+        let currentAccountId = null;
+
+        const loginForm = document.getElementById('loginForm');
+        const loginCard = document.getElementById('loginCard');
+        const dashboardCard = document.getElementById('dashboardCard');
+
+        const errorAlert = document.getElementById('errorAlert');
+        const successAlert = document.getElementById('successAlert');
+
+        const accountSelect = document.getElementById('accountSelect');
+
+        const projectsList = document.getElementById('projectsList');
+
+        const logoutBtn = document.getElementById('logoutBtn');
+        const submitBtn = document.getElementById('submitBtn');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            errorAlert.classList.add('d-none');
+            successAlert.classList.add('d-none');
+            submitBtn.setAttribute('disabled', 'true');
+            submitBtn.textContent = 'Log in';
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/v1/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/ld+json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Something went wrong');
+                }
+
+                authToken = data.token;
+                currentAccountId = data.default_account_id || null;
+
+                await loadAccounts();
+
+                loginCard.classList.add('d-none');
+                dashboardCard.classList.remove('d-none');
+
+            } catch (error) {
+                errorAlert.textContent = error.message;
+                errorAlert.classList.remove('d-none');
+                submitBtn.removeAttribute('disabled');
+            }
+        });
+
+        async function loadAccounts() {
+            try {
+                const response = await fetch('/api/v1/accounts', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Accept': 'application/ld+json'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Cannot load accounts');
+
+                const data = await response.json();
+                const accounts = data['hydra:member'] || data['member'] || data;
+
+                accountSelect.replaceChildren();
+
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.disabled = true;
+                defaultOpt.selected = true;
+                defaultOpt.textContent = '-- Select account --';
+                accountSelect.appendChild(defaultOpt);
+
+                accounts.forEach(acc => {
+                    const opt = document.createElement('option');
+                    opt.value = acc.id;
+                    opt.textContent = acc.name;
+                    if (acc.id === currentAccountId) opt.selected = true;
+                    accountSelect.appendChild(opt);
+                });
+
+                if (currentAccountId) {
+                    await loadProjects();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        accountSelect.addEventListener('change', (e) => {
+            currentAccountId = e.target.value;
+            loadProjects();
+        });
+
+        async function loadProjects() {
+            if (!currentAccountId) return;
+
+            projectsList.replaceChildren();
+            const loadingSpan = document.createElement('span');
+            loadingSpan.className = 'text-muted';
+            loadingSpan.textContent = 'Loading...';
+            projectsList.appendChild(loadingSpan);
+
+            try {
+                const response = await fetch('/api/v1/projects', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Account-ID': currentAccountId,
+                        'Accept': 'application/ld+json'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Error project loading.');
+
+                const data = await response.json();
+                const projects = data['hydra:member'] || data['member'] || data;
+
+                projectsList.replaceChildren();
+
+                if (projects.length === 0) {
+                    const emptySpan = document.createElement('span');
+                    emptySpan.className = 'text-muted';
+                    emptySpan.textContent = 'You have no projects.';
+                    projectsList.appendChild(emptySpan);
+                    return;
+                }
+
+                const listGroup = document.createElement('div');
+                listGroup.className = 'list-group';
+
+                projects.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item list-group-item-action flex-column align-items-start mb-2';
+
+                    const flexDiv = document.createElement('div');
+                    flexDiv.className = 'd-flex w-100 justify-content-between';
+
+                    const titleH5 = document.createElement('h5');
+                    titleH5.className = 'mb-1 fw-bold';
+                    titleH5.textContent = p.title;
+
+                    const descP = document.createElement('p');
+                    descP.className = 'mb-1 text-muted';
+                    descP.textContent = p.description || 'No description';
+
+                    flexDiv.appendChild(titleH5);
+                    item.appendChild(flexDiv);
+                    item.appendChild(descP);
+                    listGroup.appendChild(item);
+                });
+
+                projectsList.appendChild(listGroup);
+
+            } catch (err) {
+                projectsList.replaceChildren();
+                const errorSpan = document.createElement('span');
+                errorSpan.className = 'text-danger';
+                errorSpan.textContent = 'Error loading data.';
+                projectsList.appendChild(errorSpan);
+            }
+        }
+
+        logoutBtn.addEventListener('click', () => {
+            authToken = null;
+            currentAccountId = null;
+            dashboardCard.classList.add('d-none');
+            loginCard.classList.remove('d-none');
+            document.getElementById('password').value = '';
+            submitBtn.removeAttribute('disabled');
+            accountSelect.replaceChildren();
+            projectsList.textContent = 'Select account to see projects.';
+        });
+        })();
+    </script>
+{% endblock %}
