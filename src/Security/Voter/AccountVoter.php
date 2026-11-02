@@ -3,6 +3,7 @@
 namespace App\Security\Voter;
 
 use App\Entity\User;
+use App\Repository\AccountRepository;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
@@ -10,6 +11,11 @@ use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 final class AccountVoter extends Voter
 {
     public const string CAN_ACCESS = 'CAN_ACCESS_ACCOUNT';
+
+    public function __construct(
+        private readonly AccountRepository $accountRepository,
+    ) {
+    }
 
     protected function supports(string $attribute, mixed $subject): bool
     {
@@ -29,12 +35,6 @@ final class AccountVoter extends Voter
 
         $targetAccountId = (int)$subject;
 
-        foreach ($user->getAccounts() as $account) {
-            if ($account->getId() === $targetAccountId) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->accountRepository->userHasAccess($user, $targetAccountId);
     }
 }

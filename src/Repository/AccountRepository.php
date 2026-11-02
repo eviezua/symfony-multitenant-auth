@@ -28,4 +28,19 @@ class AccountRepository extends ServiceEntityRepository
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    public function userHasAccess(User $user, int $accountId): bool
+    {
+        $count = $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->innerJoin('a.users', 'u')
+            ->where('u = :user')
+            ->andWhere('a.id = :accountId')
+            ->setParameter('user', $user)
+            ->setParameter('accountId', $accountId)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return $count > 0;
+    }
 }
